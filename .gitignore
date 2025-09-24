@@ -1,0 +1,6 @@
+__pycache__
+other/
+wandb/
+data/processed/
+trained_models/
+*.pt
