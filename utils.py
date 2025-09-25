@@ -10,18 +10,19 @@ import pandas as pd
 from rdkit import Chem
 import networkx as nx
 from tqdm import tqdm
+import json
+import pickle
+from collections import OrderedDict
 
-# TODO:
-#   - Add tqdm progress bars
-#   - Add logging
 class DTADataset(InMemoryDataset):
-    def __init__(self, root: str = 'data', dataset: str = 'davis', target_type: str = None): #, cluster_type: str = None):
+    def __init__(self, root: str = 'data', dataset: str = 'davis', target_type: str = None, mutation: bool = False): #, cluster_type: str = None):
 
         self.root = root
         self.dataset = dataset
         # self.cluster_type = cluster_type
 
         self.target_type = target_type
+        self.mutation = mutation
 
         super().__init__(root, transform=None, pre_transform=None)
 
@@ -34,10 +35,10 @@ class DTADataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        raw_file_names = f'{self.dataset}'
+        raw_file_names = os.path.join(self.root, self.dataset)
         # raw_file_names += f'_{self.cluster_type}' if self.cluster_type else ""
-        raw_file_names += f"_{self.target_type}" if self.target_type else ""
-        raw_file_names += '.csv'
+        # raw_file_names += f"_{self.target_type}" if self.target_type else ""
+        # raw_file_names += '.csv'
         return [raw_file_names]
 
     @property
@@ -45,7 +46,7 @@ class DTADataset(InMemoryDataset):
         processed_file_names = f"{self.dataset}"
         # processed_file_names += f"_{self.cluster_type}" if self.cluster_type else ""
         processed_file_names += f"_{self.target_type}" if self.target_type else ""
-        processed_file_names += ".pt"
+        processed_file_names += f"_mutation.pt" if self.mutation else ".pt"
         return [processed_file_names]
 
     def download(self):
@@ -61,18 +62,95 @@ class DTADataset(InMemoryDataset):
     def process(self):
         data_list = []
 
-        # Read data from .csv file
-        try:
-            dataset = pd.read_csv(os.path.join(self.root, self.raw_file_names[0]))
-        except Exception as e:
-            raise FileNotFoundError(f"Could not find or open the file {os.path.join(self.root, self.raw_file_names[0])}. \nPlease ensure the file exists and/or run the corresponding preprocessing scripts for {self.target_type} target type.") from e
+        fpath = self.raw_file_names[0] + '/'
+
+        # Load fold information
+        train_fold = json.load(open(fpath + "folds/train_fold_setting1.txt"))
+        test_fold = json.load(open(fpath + "folds/test_fold_setting1.txt"))
+
+        index_to_fold = {}
+        for fold_num, fold_indices in enumerate(train_fold):
+            for idx in fold_indices:
+                index_to_fold[idx] = fold_num
+        for idx in test_fold:
+            index_to_fold[idx] = -1
+
+        # Load ligands, proteins, protein encodings, and affinity data
+        ligands = json.load(open(fpath + "drugs.json"), object_pairs_hook=OrderedDict)
+        affinity = pickle.load(open(fpath + "Y","rb"), encoding='latin1')
+        if self.mutation and self.dataset == 'davis':
+            proteins = json.load(open(fpath + "proteins_mutation.json"), object_pairs_hook=OrderedDict)
+        else:
+            proteins = json.load(open(fpath + "proteins.json"), object_pairs_hook=OrderedDict)
+
+        # Load precomputed protein embeddings
+        if self.target_type == 'deepfri' or self.target_type == 'esm':
+            if self.mutation and self.dataset == 'davis':
+                with open(fpath + f"proteins_{self.target_type}_mutation_.json", 'r') as f:
+                    protein_embeddings_file = {entry['protein_key']: entry for entry in json.load(f)}
+            else:
+                with open(fpath + f"proteins_{self.target_type}.json", 'r') as f:
+                    protein_embeddings_file = {entry['protein_key']: entry for entry in json.load(f)}
+
+        # Prepare lists of drugs, proteins, and their keys
+        drugs = []
+        prots = []
+        ligand_keys = []
+        protein_keys = []
+        protein_encodings = []
+        for d in ligands.keys():
+            lg = Chem.MolToSmiles(Chem.MolFromSmiles(ligands[d]),isomericSmiles=True)
+            drugs.append(lg)
+            ligand_keys.append(d)
+        for t in proteins.keys():
+            prots.append(proteins[t])
+            protein_keys.append(t)
+            if self.target_type == 'deepfri' or self.target_type == 'esm':
+                entry = protein_embeddings_file[t]
+                emb = entry['embedding']
+                protein_encodings.append(emb)
+        if self.dataset == 'davis':
+            affinity = [-np.log10(y/1e9) for y in affinity]
+        affinity = np.asarray(affinity)
+        rows, cols = np.where(np.isnan(affinity)==False)  
+
+        # Collect all protein-drug pairs for DataFrame
+        affinity_rows = []
+        for pair_ind in range(len(rows)):
+            prot = prots[cols[pair_ind]]
+            drug = drugs[rows[pair_ind]]
+            prot_key = protein_keys[cols[pair_ind]]
+            drug_key = ligand_keys[rows[pair_ind]]
+            aff = affinity[rows[pair_ind], cols[pair_ind]]
+            fold = index_to_fold.get(pair_ind, 'none')
+            if self.target_type == 'deepfri' or self.target_type == 'esm':
+                prot_encoding = protein_encodings[cols[pair_ind]]
+                affinity_rows.append({
+                    'target_sequence': prot,
+                    'compound_iso_smiles': drug,
+                    'affinity': aff,
+                    'drug_key': drug_key,
+                    'protein_key': prot_key,
+                    'protein_encoding': prot_encoding,
+                    'fold': fold
+                })
+            else:
+                affinity_rows.append({
+                    'target_sequence': prot,
+                    'compound_iso_smiles': drug,
+                    'affinity': aff,
+                    'drug_key': drug_key,
+                    'protein_key': prot_key,
+                    'fold': fold
+                })
+        dataset = pd.DataFrame(affinity_rows)
         
         drug_smiles = dataset['compound_iso_smiles'].values
         target_sequences = dataset['target_sequence'].values
         affinities = dataset['affinity'].values
         folds = dataset['fold'].values
-        if self.target_type is 'deepfri' or self.target_type == 'esm':
-            target_encodings = np.array(dataset['embeddings'].apply(lambda x: np.array(eval(x))).tolist())
+        if self.target_type == 'deepfri' or self.target_type == 'esm':
+            target_encodings = np.array(dataset['protein_encoding'])
         elif self.target_type is None:
             target_encodings = np.asarray([seq_cat(t) for t in target_sequences])
         else:   
@@ -99,7 +177,6 @@ class DTADataset(InMemoryDataset):
             # cluster_number = cluster_labels[i] if self.cluster_type else -1
             # protein_sequence = target_sequences[i]
             
-
             GCNData = DATA.Data(x=torch.Tensor(np.array(features)),
                                 edge_index=torch.LongTensor(edge_index).transpose(1, 0),
                                 y=torch.FloatTensor([labels]))
