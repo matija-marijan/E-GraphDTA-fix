@@ -88,8 +88,8 @@ parser.add_argument('-vf', '--validation_fold', type=int, default=0,
                     help="Fold index to use for validation when using k-fold cross-validation (default: 0).")
 # parser.add_argument('--split_type', type=str, default=None,
 #                     help="Type of data split. Choose from: 'random', 'original', 'kfold', 'protein_cold', 'drug_cold', or 'fully_cold'.")
-# parser.add_argument('--mutation', action='store_true', default=False,
-                    # help="Flag for including protein sequence mutations for the Davis dataset (default: False).")
+parser.add_argument('--mutation', action='store_true', default=False,
+                    help="Flag for including protein sequence mutations for the Davis dataset (default: False).")
 
 args = parser.parse_args()
 
@@ -142,7 +142,7 @@ if args.wandb:
 # Main program: Train on specified dataset 
 if __name__ == "__main__":
     print('Training ' + model_st + ' on ' + dataset + ' dataset...')
-    dta_dataset = DTADataset(root='data', dataset=dataset, target_type=target_type)
+    dta_dataset = DTADataset(root='data', dataset=dataset, target_type=target_type, mutation=args.mutation)
 
     # original k-fold split (hard coded!)
     all_folds = [0, 1, 2, 3, 4]
