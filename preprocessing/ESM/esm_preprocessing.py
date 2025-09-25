@@ -7,27 +7,30 @@ import networkx as nx
 from utils import *
 import argparse
 from tqdm import tqdm
+import json
+from collections import OrderedDict
 
 model, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 if torch.cuda.is_available():
     model = model.cuda()
 batch_converter = alphabet.get_batch_converter()
-embeddings = []
 
 datasets = ['davis', 'kiba']
 for dataset in datasets:
-
-    processed_dataset = 'data/' + dataset + '_esm.csv'
+    embeddings = []
+    processed_dataset = 'data/' + dataset + '/proteins_esm.json'
 
     if not os.path.isfile(processed_dataset):
-        df = pd.read_csv('data/' + dataset + '.csv')
+        proteins = json.load(open('data/' + dataset + "/proteins.json"), object_pairs_hook=OrderedDict)
+        prots = []
+        protein_keys = []
+        for t in proteins.keys():
+            prots.append(proteins[t])
+            protein_keys.append(t)
 
-        protein_list = list(df['target_sequence'])
+        protein_list = list(zip(protein_keys, prots))
         batch_size = 4 if dataset == 'davis' else 1
         labels = []
-        for i in range(0, len(protein_list)):
-            labels.append('protein' + str(i + 1))
-        protein_list = list(zip(labels, protein_list))
 
         for i in tqdm(range(0, len(protein_list), batch_size), desc=f"Processing {dataset} proteins"):
 
@@ -51,8 +54,13 @@ for dataset in datasets:
                 embeddings.append(sequence_representations[j])
 
         embeddings = np.asarray(embeddings)
-        df['embeddings'] = list(embeddings)
-        df.to_csv(processed_dataset, index = False)
+
+        df = pd.DataFrame({
+            'protein_key': protein_keys,
+            'sequence': prots,
+            'embedding': [emb.tolist() for emb in embeddings]
+        })
+        df.to_json(processed_dataset, orient='records', indent=4)
 
         print(processed_dataset, ' has been created')
     else:

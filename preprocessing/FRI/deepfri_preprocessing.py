@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import argparse
 from tqdm import tqdm
+from collections import OrderedDict
 
 model_config = 'preprocessing/FRI/trained_models/model_config.json'
 ont = 'cc'
@@ -28,25 +29,33 @@ predictor = Predictor(models[ont], gcn = gcn)
 
 datasets = ['davis', 'kiba']
 for dataset in datasets:
-    processed_dataset = 'data/' + dataset + '_deepfri.csv'
+    embeddings = []
+    processed_dataset = 'data/' + dataset + '/proteins_deepfri.json'
     if not os.path.isfile(processed_dataset):
 
         predictor = Predictor(models[ont], gcn=gcn)
         
-        df = pd.read_csv('data/' + dataset + '.csv')
-        prots = list(df['target_sequence'])
-        embeddings = []
+        proteins = json.load(open('data/' + dataset + "/proteins.json"), object_pairs_hook=OrderedDict)
+        prots = []
+        protein_keys = []
+        for t in proteins.keys():
+            prots.append(proteins[t])
+            protein_keys.append(t)
+
         # DeepFRI protein representation
         for i in tqdm(range(0, len(prots)), desc=f"Processing {dataset} proteins"):
             prot = prots[i]
             emb = predictor.predict_embeddings(prot, layer_name = emb_layer)
             embeddings.append(emb)
-        print('deepfri embeddings done')
-        prots = np.asarray(embeddings)
-        print(np.shape(prots))
 
-        df['embeddings'] = list(prots)
-        df.to_csv(processed_dataset, index = False)
+        embeddings = np.asarray(embeddings)
+
+        df = pd.DataFrame({
+            'protein_key': protein_keys,
+            'sequence': prots,
+            'embedding': [emb.tolist() for emb in embeddings]
+        })
+        df.to_json(processed_dataset, orient='records', indent=4)
 
         print(processed_dataset, ' has been created')
     else:
