@@ -12,7 +12,7 @@ for dataset in "${datasets[@]}"; do
     for model in "${models[@]}"; do
         for layer in "${num_layers[@]}"; do
             for fold in "${validation_folds[@]}"; do
-                python training.py --seed "$seed" --wandb --dataset "$dataset" --model "$model" --validation_fold "$fold" --num_layers "$layer"&
+                python training_validation.py --seed "$seed" --wandb --dataset "$dataset" --model "$model" --validation_fold "$fold" --num_layers "$layer"&
             done
         done
         wait
@@ -21,7 +21,7 @@ done
 
 # for model in "${models[@]}"; do
 #     for fold in "${validation_folds[@]}"; do
-#         python training.py --seed "$seed" --wandb --dataset "davis" --model "$model" --validation_fold "$fold" --mutation &
+#         python training_validation.py --seed "$seed" --wandb --dataset "davis" --model "$model" --validation_fold "$fold" --mutation &
 #     done
 #     wait
 # done
