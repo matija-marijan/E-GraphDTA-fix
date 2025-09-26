@@ -87,7 +87,8 @@ parser.add_argument('--wandb', action='store_true', default=False,
                     help="Flag for using wandb logging (default: False).")
 parser.add_argument('--mutation', action='store_true', default=False,
                     help="Flag for including protein sequence mutations for the Davis dataset (default: False).")
-
+parser.add_argument('--num_layers', type=int, default=3,
+                    help="Number of layers in the protein learning channel (default: 3).")
 args = parser.parse_args()
 
 modeling = all_models[args.model]
@@ -133,8 +134,8 @@ NUM_EPOCHS = 1000
 print('Learning rate: ', LR)
 print('Epochs: ', NUM_EPOCHS)
 
-group_name = f"{args.model}_{args.dataset}"
-run_name = f"{args.model}_{args.dataset}"
+group_name = f"{args.model}_{args.dataset}_{args.num_layers}_layers"
+run_name = f"{args.model}_{args.dataset}_{args.num_layers}_layers"
 if args.mutation:
     group_name += "_mutation"
     run_name += "_mutation"
@@ -163,7 +164,7 @@ if __name__ == "__main__":
 
     # training the model
     device = torch.device(cuda_name if torch.cuda.is_available() else "cpu")
-    model = modeling().to(device)
+    model = modeling(num_layers=args.num_layers).to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
@@ -180,8 +181,8 @@ if __name__ == "__main__":
             best_loss = train_loss
         tqdm.write(f'Best loss: {best_loss:.6f} (epoch {best_epoch})')
 
-    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_testing.model'
-    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_testing.csv'
+    model_file_name = 'trained_models/model_' + run_name + '_testing.model'
+    result_file_name = 'trained_models/result_' + run_name + '_testing.csv'
     os.makedirs('trained_models', exist_ok=True)
 
     torch.save(best_model.state_dict(), model_file_name)
