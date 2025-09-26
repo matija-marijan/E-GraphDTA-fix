@@ -168,9 +168,6 @@ if __name__ == "__main__":
     best_mse = 1000
     best_epoch = -1
 
-    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + str(val_fold) + '.model'
-    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + str(val_fold) + '.csv'
-
     for epoch in range(NUM_EPOCHS):
         tqdm.write(f'\nEpoch {epoch+1}')
         train(model, device, train_loader, optimizer, epoch+1, wandb_log=args.wandb)
@@ -185,6 +182,10 @@ if __name__ == "__main__":
             best_epoch = epoch+1
             best_mse = ret[1]
         tqdm.write(f'Validation MSE: {ret[1]:.6f}\nBest MSE: {best_mse:.6f} (epoch {best_epoch})')
+
+    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + str(val_fold) + '.model'
+    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + str(val_fold) + '.csv'
+    os.makedirs('trained_models', exist_ok=True)
 
     torch.save(best_model.state_dict(), model_file_name)
 
