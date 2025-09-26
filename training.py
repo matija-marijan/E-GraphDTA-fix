@@ -128,7 +128,7 @@ TRAIN_BATCH_SIZE = 512
 TEST_BATCH_SIZE = 512
 LR = 0.0005
 LOG_INTERVAL = 20
-NUM_EPOCHS = 5
+NUM_EPOCHS = 1000
 
 print('Learning rate: ', LR)
 print('Epochs: ', NUM_EPOCHS)
@@ -177,8 +177,8 @@ if __name__ == "__main__":
             best_loss = train_loss
         tqdm.write(f'Best loss: {best_loss:.6f} (epoch {best_epoch})')
 
-    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + 'full.model'
-    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + 'full.csv'
+    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_testing.model'
+    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_testing.csv'
     os.makedirs('trained_models', exist_ok=True)
 
     torch.save(best_model.state_dict(), model_file_name)

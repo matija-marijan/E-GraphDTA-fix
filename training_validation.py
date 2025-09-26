@@ -189,11 +189,21 @@ if __name__ == "__main__":
             best_mse = ret[1]
         tqdm.write(f'Validation MSE: {ret[1]:.6f}\nBest MSE: {best_mse:.6f} (epoch {best_epoch})')
 
-    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + str(val_fold) + '.model'
-    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + str(val_fold) + '.csv'
+    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + str(val_fold) + '_validation.model'
+    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + str(val_fold) + '_validation.csv'
     os.makedirs('trained_models', exist_ok=True)
 
     torch.save(best_model.state_dict(), model_file_name)
+
+    G,P = predicting(best_model, device, val_loader)
+    val_ret = [rmse(G,P),mse(G,P),pearson(G,P),spearman(G,P),ci(G,P)]
+
+    tqdm.write('\nResults on val set:')
+    tqdm.write(f"RMSE: {val_ret[0]}")
+    tqdm.write(f"MSE: {val_ret[1]}")
+    tqdm.write(f"Pearson: {val_ret[2]}")
+    tqdm.write(f"Spearman: {val_ret[3]}")
+    tqdm.write(f"CI: {val_ret[4]}\n")
 
     G,P = predicting(best_model, device, test_loader)
     test_ret = [rmse(G,P),mse(G,P),pearson(G,P),spearman(G,P),ci(G,P)]
@@ -217,7 +227,10 @@ if __name__ == "__main__":
 
     with open(result_file_name, 'w') as f:
         # write header
-        f.write("test_rmse,test_mse,test_pearson,test_spearman,test_ci\n")
+        f.write("test_rmse,test_mse,test_pearson,test_spearman,test_ci,val_rmse,val_mse,val_pearson,val_spearman,val_ci\n")
         # write values
         f.write(','.join(map(str, test_ret)))
+        f.write(',')
+        f.write(','.join(map(str, val_ret)))
+        f.write('\n')
     
