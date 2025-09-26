@@ -8,7 +8,7 @@ from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 # GINConv model + ESM protein representation
 class ESM_GINConvNet(torch.nn.Module):
     def __init__(self, n_output=1,num_features_xd=78, num_features_xt=25,
-                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2):
+                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2, num_layers=3):
 
         super(ESM_GINConvNet, self).__init__()
 
@@ -40,18 +40,26 @@ class ESM_GINConvNet(torch.nn.Module):
         self.fc1_xd = Linear(dim, output_dim)
 
         # ESM protein embedding linear layer
-        
-        # triple convolution
-        self.fc_xt = nn.Linear(320, 256)
-        self.fc_xt2 = nn.Linear(256, 192)
-        self.fc_xt3 = nn.Linear(192, 128)
-        self.bn_xt = nn.BatchNorm1d(256)
-        self.bn_xt2 = nn.BatchNorm1d(192)
-        self.bn_xt3 = nn.BatchNorm1d(128)
+        self.num_layers = num_layers
+        if self.num_layers not in [1, 2, 3]:
+            raise ValueError("num_layers must be between 1 and 3")
+        if self.num_layers == 1:
+            self.fc_xt = nn.Linear(320, 128)
+            self.bn_xt = nn.BatchNorm1d(128)
 
-        # single convolution
-        # self.fc_xt = nn.Linear(320, 128)
-        # self.bn_xt = nn.BatchNorm1d(128)
+        elif self.num_layers == 2:
+            self.fc_xt = nn.Linear(320, 192)
+            self.fc_xt2 = nn.Linear(192, 128)
+            self.bn_xt = nn.BatchNorm1d(192)
+            self.bn_xt2 = nn.BatchNorm1d(128)
+
+        elif self.num_layers == 3:
+            self.fc_xt = nn.Linear(320, 256)
+            self.fc_xt2 = nn.Linear(256, 192)
+            self.fc_xt3 = nn.Linear(192, 128)
+            self.bn_xt = nn.BatchNorm1d(256)
+            self.bn_xt2 = nn.BatchNorm1d(192)
+            self.bn_xt3 = nn.BatchNorm1d(128)
 
         # combined layers
         self.fc1 = nn.Linear(256, 1024)
@@ -77,17 +85,29 @@ class ESM_GINConvNet(torch.nn.Module):
         x = F.dropout(x, p=0.2, training=self.training)
 
         # ESM Protein embedding linear layer learning
-        xt = self.fc_xt(target)
-        xt = self.bn_xt(xt)
-        xt = self.relu(xt)
+        if self.num_layers == 1:
+            xt = self.fc_xt(target)
+            xt = self.bn_xt(xt)
+            xt = self.relu(xt)
+            
+        elif self.num_layers == 2:
+            xt = self.fc_xt(target)
+            xt = self.bn_xt(xt)
+            xt = self.relu(xt)
+            xt = self.fc_xt2(xt)
+            xt = self.bn_xt2(xt)
+            xt = self.relu(xt)
 
-        xt = self.fc_xt2(xt)
-        xt = self.bn_xt2(xt)
-        xt = self.relu(xt)
-
-        xt = self.fc_xt3(xt)
-        xt = self.bn_xt3(xt)
-        xt = self.relu(xt)
+        elif self.num_layers == 3:
+            xt = self.fc_xt(target)
+            xt = self.bn_xt(xt)
+            xt = self.relu(xt)
+            xt = self.fc_xt2(xt)
+            xt = self.bn_xt2(xt)
+            xt = self.relu(xt)
+            xt = self.fc_xt3(xt)
+            xt = self.bn_xt3(xt)
+            xt = self.relu(xt)
 
         # concat
         xc = torch.cat((x, xt), 1)

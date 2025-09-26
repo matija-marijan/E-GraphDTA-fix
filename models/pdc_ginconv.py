@@ -8,7 +8,7 @@ from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 # GINConv model + protein-drug-drug concatenation
 class PDC_GINConvNet(torch.nn.Module):
     def __init__(self, n_output=1,num_features_xd=78, num_features_xt=25,
-                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2):
+                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2, num_layers=3):
 
         super(PDC_GINConvNet, self).__init__()
 
@@ -44,9 +44,34 @@ class PDC_GINConvNet(torch.nn.Module):
         self.embedding_xt = nn.Embedding(num_features_xt + 1, embed_dim)
         
         # 1D convolution on protein-drug concatenated sequence
-        self.conv_xc_1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=8)
-        self.bn_xc = nn.BatchNorm1d(n_filters)
-        self.fc1_xc = nn.Linear(32*249, output_dim)
+        self.num_layers = num_layers
+        if self.num_layers not in [1, 2, 3]:
+            raise ValueError("num_layers must be between 1 and 3")
+        
+        kernel_size = 8
+        stride = 1
+
+        if self.num_layers == 1:
+            self.conv_xc1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.bn_xc1 = nn.BatchNorm1d(n_filters)
+            self.fc_xc = nn.Linear(32*249, output_dim)
+
+        elif self.num_layers == 2:
+            self.conv_xc1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.bn_xc1 = nn.BatchNorm1d(n_filters)
+            self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.bn_xc2 = nn.BatchNorm1d(n_filters)
+            self.fc_xc = nn.Linear(32*242, output_dim)
+            
+        elif self.num_layers == 3:
+            self.conv_xc1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.bn_xc1 = nn.BatchNorm1d(n_filters)
+            self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.bn_xc2 = nn.BatchNorm1d(n_filters)
+            self.conv_xc3 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.bn_xc3 = nn.BatchNorm1d(n_filters)
+            self.fc_xc = nn.Linear(32*235, output_dim)
+            
         self.bn_fc = nn.BatchNorm1d(output_dim)
         # -----MATIJA-----
 
@@ -81,15 +106,44 @@ class PDC_GINConvNet(torch.nn.Module):
         xc = torch.cat((embedded_xt, x_2d), 2)
 
         # convolution
-        conv_xc = self.conv_xc_1(xc)
-        conv_xc = self.bn_xc(conv_xc)
-        conv_xc = self.relu(conv_xc)
+        if self.num_layers == 1:
+            conv_xc = self.conv_xc1(xc)
+            conv_xc = self.bn_xc1(conv_xc)
+            conv_xc = self.relu(conv_xc)
+            
+            # flatten
+            xc = conv_xc.view(-1, 32 * 249)
 
-        # flatten
-        xc = conv_xc.view(-1, 32 * 249)
+        elif self.num_layers == 2:
+            conv_xc = self.conv_xc1(xc)
+            conv_xc = self.bn_xc1(conv_xc)
+            conv_xc = self.relu(conv_xc)
+
+            conv_xc = self.conv_xc2(conv_xc)
+            conv_xc = self.bn_xc2(conv_xc)
+            conv_xc = self.relu(conv_xc)
+            
+            # flatten
+            xc = conv_xc.view(-1, 32 * 242)
+
+        elif self.num_layers == 3:
+            conv_xc = self.conv_xc1(xc)
+            conv_xc = self.bn_xc1(conv_xc)
+            conv_xc = self.relu(conv_xc)
+            
+            conv_xc = self.conv_xc2(conv_xc)
+            conv_xc = self.bn_xc2(conv_xc)
+            conv_xc = self.relu(conv_xc)
+
+            conv_xc = self.conv_xc3(conv_xc)
+            conv_xc = self.bn_xc3(conv_xc)
+            conv_xc = self.relu(conv_xc)
+
+            # flatten
+            xc = conv_xc.view(-1, 32 * 235)
 
         # linear
-        xc = self.fc1_xc(xc)
+        xc = self.fc_xc(xc)
         xc = self.bn_fc(xc)
         xc = self.relu(xc)
 
