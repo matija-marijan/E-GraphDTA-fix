@@ -42,8 +42,7 @@ def train(model, device, train_loader, optimizer, epoch, wandb_log=False):
             #                                                                loss.item()))
     tqdm.write('Train loss: {:.6f}'.format(loss.item()))
     if wandb_log:
-        wandb.log({"loss": loss.item()})
-    return loss.item()
+        wandb.log({"loss": loss.item()}, commit=False)
 
 def predicting(model, device, loader):
     model.eval()
@@ -85,6 +84,10 @@ parser.add_argument('--seed', type=int,
                     help="Random seed for reproducibility.")
 parser.add_argument('--wandb', action='store_true', default=False,
                     help="Flag for using wandb logging (default: False).")
+parser.add_argument('-vf', '--validation_fold', type=int, default=0,
+                    help="Fold index to use for validation when using k-fold cross-validation (default: 0).")
+# parser.add_argument('--split_type', type=str, default=None,
+#                     help="Type of data split. Choose from: 'random', 'original', 'kfold', 'protein_cold', 'drug_cold', or 'fully_cold'.")
 parser.add_argument('--mutation', action='store_true', default=False,
                     help="Flag for including protein sequence mutations for the Davis dataset (default: False).")
 
@@ -128,13 +131,13 @@ TRAIN_BATCH_SIZE = 512
 TEST_BATCH_SIZE = 512
 LR = 0.0005
 LOG_INTERVAL = 20
-NUM_EPOCHS = 5
+NUM_EPOCHS = 1000
 
 print('Learning rate: ', LR)
 print('Epochs: ', NUM_EPOCHS)
 
-group_name = f"{args.model}_{args.dataset}_full"
-run_name = f"{args.model}_{args.dataset}_full"
+group_name = f"{args.model}_{args.dataset}"
+run_name = f"{args.model}_{args.dataset}_fold_{args.validation_fold}"
 if args.mutation:
     group_name += "_mutation"
     run_name += "_mutation"
@@ -147,16 +150,20 @@ if __name__ == "__main__":
     print('Training ' + model_st + ' on ' + dataset + ' dataset...')
     dta_dataset = DTADataset(root='data', dataset=dataset, target_type=target_type, mutation=args.mutation)
 
-    # Train on all data except the test set (fold == -1)
-    train_folds = [0, 1, 2, 3, 4]
+    # original k-fold split (hard coded!)
+    all_folds = [0, 1, 2, 3, 4]
+    val_fold = args.validation_fold
+    train_folds = [f for f in all_folds if f != val_fold]
     
     train_mask = torch.isin(dta_dataset._data.fold, torch.tensor(train_folds))
     train_dataset = dta_dataset[train_mask]
+    val_dataset = dta_dataset[dta_dataset._data.fold == val_fold]
     test_dataset = dta_dataset[dta_dataset._data.fold == -1]
 
     # make data PyTorch mini-batch processing ready
     train_loader = DataLoader(train_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
 
     # training the model
     device = torch.device(cuda_name if torch.cuda.is_available() else "cpu")
@@ -164,21 +171,26 @@ if __name__ == "__main__":
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
-    best_loss = 1000
+    best_mse = 1000
     best_epoch = -1
 
     for epoch in range(NUM_EPOCHS):
         tqdm.write(f'\nEpoch {epoch+1}')
-        train_loss = train(model, device, train_loader, optimizer, epoch+1, wandb_log=args.wandb)
+        train(model, device, train_loader, optimizer, epoch+1, wandb_log=args.wandb)
 
-        if train_loss < best_loss:
+        G,P = predicting(model, device, val_loader)
+        ret = [rmse(G,P),mse(G,P),pearson(G,P),spearman(G,P)]
+        if args.wandb:
+            wandb.log({"rmse": ret[0], "mse": ret[1], "pearson": ret[2], "spearman": ret[3]})
+
+        if ret[1]<best_mse:
             best_model = model
             best_epoch = epoch+1
-            best_loss = train_loss
-        tqdm.write(f'Best loss: {best_loss:.6f} (epoch {best_epoch})')
+            best_mse = ret[1]
+        tqdm.write(f'Validation MSE: {ret[1]:.6f}\nBest MSE: {best_mse:.6f} (epoch {best_epoch})')
 
-    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + 'full.model'
-    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + 'full.csv'
+    model_file_name = 'trained_models/model_' + model_st + '_' + dataset + '_' + str(val_fold) + '.model'
+    result_file_name = 'trained_models/result_' + model_st + '_' + dataset + '_' + str(val_fold) + '.csv'
     os.makedirs('trained_models', exist_ok=True)
 
     torch.save(best_model.state_dict(), model_file_name)
