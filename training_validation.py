@@ -148,7 +148,7 @@ if args.seed is not None:
 run_name += f"_fold_{args.validation_fold}"
 
 if args.wandb:
-    wandb.init(project = 'GraphDTA', config = args, group = group_name, name = run_name )
+    wandb.init(project = 'E-GraphDTA - Validation', config = args, group = group_name, name = run_name )
     
 # Main program: Train on specified dataset 
 if __name__ == "__main__":

@@ -144,7 +144,7 @@ if args.seed is not None:
 run_name += f"_testing"
 
 if args.wandb:
-    wandb.init(project = 'GraphDTA', config = args, group = group_name, name = run_name )
+    wandb.init(project = 'E-GraphDTA - Testing', config = args, group = group_name, name = run_name )
     
 # Main program: Train on specified dataset 
 if __name__ == "__main__":
