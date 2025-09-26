@@ -136,8 +136,14 @@ NUM_EPOCHS = 1000
 print('Learning rate: ', LR)
 print('Epochs: ', NUM_EPOCHS)
 
+group_name = f"{args.model}_{args.dataset}"
+run_name = f"{args.model}_{args.dataset}_fold_{args.validation_fold}"
+if args.mutation:
+    group_name += "_mutation"
+    run_name += "_mutation"
+
 if args.wandb:
-    wandb.init(project = 'GraphDTA', config = args, group = f"{args.model}_{args.dataset}", name = f"{args.model}_{args.dataset}_vf{args.validation_fold}" )
+    wandb.init(project = 'GraphDTA', config = args, group = group_name, name = run_name )
     
 # Main program: Train on specified dataset 
 if __name__ == "__main__":
@@ -149,10 +155,10 @@ if __name__ == "__main__":
     val_fold = args.validation_fold
     train_folds = [f for f in all_folds if f != val_fold]
     
-    train_mask = torch.isin(dta_dataset.data.fold, torch.tensor(train_folds))
+    train_mask = torch.isin(dta_dataset._data.fold, torch.tensor(train_folds))
     train_dataset = dta_dataset[train_mask]
-    val_dataset = dta_dataset[dta_dataset.data.fold == val_fold]
-    test_dataset = dta_dataset[dta_dataset.data.fold == -1]
+    val_dataset = dta_dataset[dta_dataset._data.fold == val_fold]
+    test_dataset = dta_dataset[dta_dataset._data.fold == -1]
 
     # make data PyTorch mini-batch processing ready
     train_loader = DataLoader(train_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
@@ -200,9 +206,18 @@ if __name__ == "__main__":
     tqdm.write(f"CI: {test_ret[4]}")
 
     if args.wandb:
-        wandb.log({"test_rmse": test_ret[0], "test_mse": test_ret[1], "test_pearson": test_ret[2], "test_spearman": test_ret[3], "test_ci": test_ret[4]})
+        wandb.log({
+            "test_rmse": test_ret[0],
+            "test_mse": test_ret[1],
+            "test_pearson": test_ret[2],
+            "test_spearman": test_ret[3],
+            "test_ci": test_ret[4]
+        })
         wandb.finish()
 
-    with open(result_file_name,'w') as f:
-        f.write(','.join(map(str,test_ret)))
+    with open(result_file_name, 'w') as f:
+        # write header
+        f.write("test_rmse,test_mse,test_pearson,test_spearman,test_ci\n")
+        # write values
+        f.write(','.join(map(str, test_ret)))
     
