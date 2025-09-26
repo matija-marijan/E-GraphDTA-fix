@@ -81,8 +81,8 @@ parser.add_argument('--model', type=str, choices=list(all_models.keys()), requir
                     help="Model name. Choose from: " + ", ".join(all_models.keys()) + ".")
 parser.add_argument('--cuda', type=int, default=0, 
                     help="CUDA device index (default: 0).")
-parser.add_argument('--seed', type=int, 
-                    help="Random seed for reproducibility.")
+parser.add_argument('--seed', type=int, default=None, 
+                    help="Random seed for reproducibility (default: None).")
 parser.add_argument('--wandb', action='store_true', default=False,
                     help="Flag for using wandb logging (default: False).")
 parser.add_argument('--mutation', action='store_true', default=False,
@@ -133,11 +133,14 @@ NUM_EPOCHS = 1000
 print('Learning rate: ', LR)
 print('Epochs: ', NUM_EPOCHS)
 
-group_name = f"{args.model}_{args.dataset}_full"
-run_name = f"{args.model}_{args.dataset}_full"
+group_name = f"{args.model}_{args.dataset}"
+run_name = f"{args.model}_{args.dataset}"
 if args.mutation:
     group_name += "_mutation"
     run_name += "_mutation"
+if args.seed is not None:
+    run_name += f"_seed_{args.seed}"
+run_name += f"_testing"
 
 if args.wandb:
     wandb.init(project = 'GraphDTA', config = args, group = group_name, name = run_name )
