@@ -5,12 +5,19 @@ from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import GINConv, global_add_pool
 from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 
-# GINConv model + protein-drug-drug concatenation
-class PDC_GINConvNet(torch.nn.Module):
-    def __init__(self, n_output=1,num_features_xd=78, num_features_xt=25,
-                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2, num_layers=3, kernel_size=8):
+class GlobalMaxPooling1D(nn.Module):
+    def __init(self):
+        super(GlobalMaxPooling1D, self).__init__()
 
-        super(PDC_GINConvNet, self).__init__()
+    def forward(self, x):
+        return torch.max(x, dim = -1)[0]
+
+# GINConv model + protein-drug-drug concatenation + inverted convolution
+class PDConv_Vnoc_GINConvNet(torch.nn.Module):
+    def __init__(self, n_output=1,num_features_xd=78, num_features_xt=25,
+                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2, num_layers=3, kernel_size=16):
+
+        super(PDConv_Vnoc_GINConvNet, self).__init__()
 
         dim = 32
         self.dropout = nn.Dropout(dropout)
@@ -41,35 +48,38 @@ class PDC_GINConvNet(torch.nn.Module):
 
         # protein embedding
         self.embedding_xt = nn.Embedding(num_features_xt + 1, embed_dim)
-        
-        # 1D convolution on protein-drug concatenated sequence
+
+        # pointwise convolution
+        self.pointwise_conv = nn.Conv1d(in_channels=2*embed_dim, out_channels=embed_dim, kernel_size=1)
+
+        # 1D convolution on transposed protein-drug concatenated sequence
         self.num_layers = num_layers
         if self.num_layers not in [1, 2, 3]:
             raise ValueError("num_layers must be between 1 and 3")
-
+        
         self.kernel_size = kernel_size
         self.stride = 1
 
         if self.num_layers == 1:
-            self.conv_xc1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
+            self.conv_xc1 = nn.Conv1d(in_channels=embed_dim, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc1 = nn.BatchNorm1d(n_filters)
 
-        elif self.num_layers == 2:
-            self.conv_xc1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
+        if self.num_layers == 2:
+            self.conv_xc1 = nn.Conv1d(in_channels=embed_dim, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc1 = nn.BatchNorm1d(n_filters)
             self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc2 = nn.BatchNorm1d(n_filters)
 
-        elif self.num_layers == 3:
-            self.conv_xc1 = nn.Conv1d(in_channels=1000, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
+        if self.num_layers == 3:
+            self.conv_xc1 = nn.Conv1d(in_channels=embed_dim, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc1 = nn.BatchNorm1d(n_filters)
             self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc2 = nn.BatchNorm1d(n_filters)
             self.conv_xc3 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc3 = nn.BatchNorm1d(n_filters)
-        
-        self.out_dim = 2 * embed_dim - self.num_layers*(self.kernel_size - self.stride)
-        self.fc_xc = nn.Linear(32*self.out_dim, output_dim)
+
+        self.gmp_xc = GlobalMaxPooling1D()
+        self.fc_xc = nn.Linear(n_filters, output_dim)
         self.bn_fc = nn.BatchNorm1d(output_dim)
 
         # combined layers
@@ -102,7 +112,10 @@ class PDC_GINConvNet(torch.nn.Module):
         x_2d = x.unsqueeze(1).expand(-1, embedded_xt.size(1), -1)
         xc = torch.cat((embedded_xt, x_2d), 2)
 
-        # convolution
+        # pointwise convolution
+        xc = self.pointwise_conv(xc.permute(0, 2, 1))
+                                    
+        # transposed convolution
         if self.num_layers == 1:
             conv_xc = self.conv_xc1(xc)
             conv_xc = self.bn_xc1(conv_xc)
@@ -121,18 +134,18 @@ class PDC_GINConvNet(torch.nn.Module):
             conv_xc = self.conv_xc1(xc)
             conv_xc = self.bn_xc1(conv_xc)
             conv_xc = self.relu(conv_xc)
-            
+
             conv_xc = self.conv_xc2(conv_xc)
             conv_xc = self.bn_xc2(conv_xc)
             conv_xc = self.relu(conv_xc)
-
+            
             conv_xc = self.conv_xc3(conv_xc)
             conv_xc = self.bn_xc3(conv_xc)
             conv_xc = self.relu(conv_xc)
 
-        # flatten
-        xc = conv_xc.view(-1, 32 * self.out_dim)
-            
+        # global max pooling
+        xc = self.gmp_xc(conv_xc)
+
         # linear
         xc = self.fc_xc(xc)
         xc = self.bn_fc(xc)

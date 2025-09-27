@@ -15,7 +15,7 @@ class GlobalMaxPooling1D(nn.Module):
 # GINConv model + protein-drug-drug concatenation + inverted convolution
 class PDC_Vnoc_GINConvNet(torch.nn.Module):
     def __init__(self, n_output=1,num_features_xd=78, num_features_xt=25,
-                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2, num_layers=3):
+                 n_filters=32, embed_dim=128, output_dim=128, dropout=0.2, num_layers=3, kernel_size=16):
 
         super(PDC_Vnoc_GINConvNet, self).__init__()
 
@@ -54,25 +54,25 @@ class PDC_Vnoc_GINConvNet(torch.nn.Module):
         if self.num_layers not in [1, 2, 3]:
             raise ValueError("num_layers must be between 1 and 3")
         
-        kernel_size = 16
-        stride = 1
+        self.kernel_size = kernel_size
+        self.stride = 1
 
         if self.num_layers == 1:
-            self.conv_xc1 = nn.Conv1d(in_channels=2*embed_dim, out_channels=n_filters, kernel_size=kernel_size, stride = stride)
+            self.conv_xc1 = nn.Conv1d(in_channels=2*embed_dim, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc1 = nn.BatchNorm1d(n_filters)
 
         if self.num_layers == 2:
-            self.conv_xc1 = nn.Conv1d(in_channels=2*embed_dim, out_channels=n_filters, kernel_size=kernel_size, stride = stride)
+            self.conv_xc1 = nn.Conv1d(in_channels=2*embed_dim, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc1 = nn.BatchNorm1d(n_filters)
-            self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc2 = nn.BatchNorm1d(n_filters)
 
         if self.num_layers == 3:
-            self.conv_xc1 = nn.Conv1d(in_channels=2*embed_dim, out_channels=n_filters, kernel_size=kernel_size, stride = stride)
+            self.conv_xc1 = nn.Conv1d(in_channels=2*embed_dim, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc1 = nn.BatchNorm1d(n_filters)
-            self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.conv_xc2 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc2 = nn.BatchNorm1d(n_filters)
-            self.conv_xc3 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size, stride=stride)
+            self.conv_xc3 = nn.Conv1d(in_channels=n_filters, out_channels=n_filters, kernel_size=self.kernel_size, stride=self.stride)
             self.bn_xc3 = nn.BatchNorm1d(n_filters)
 
         self.gmp_xc = GlobalMaxPooling1D()
