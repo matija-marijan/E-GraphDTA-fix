@@ -222,6 +222,12 @@ if __name__ == "__main__":
 
     if args.wandb:
         wandb.log({
+            "val_rmse": val_ret[0],
+            "val_mse": val_ret[1],
+            "val_pearson": val_ret[2],
+            "val_spearman": val_ret[3],
+            "val_ci": val_ret[4],
+            
             "test_rmse": test_ret[0],
             "test_mse": test_ret[1],
             "test_pearson": test_ret[2],
